@@ -71,6 +71,17 @@ GET /api/auto-reasoning.effort?sessionId=<sid>
 不搬进 `dsh-jev-preset`：jev 是纯提示词插件（全目录无运行时 `ctx.on()` 注册），
 塞不进去。
 
+### 迁移已完成（2026-10-05）
+
+- `dsh-plugin-codemode` 侧已清空：`autoReasoning` 配置项、`./client` 导出、`dsh.client`
+  声明、`GET /api/codemode.auto-effort`、`src/{auto-reasoning,jev-client}.ts`、
+  570 行的 auto 集成测试，全部删除（该插件 `node --test` 现在 10/10）。
+- 本插件的声明行由 **dsh-jev-preset 的 bundle** 顺带 insert（同一个 insert 组里的第二条），
+  所以**装 JEV preset 就带上 auto 档位**，与 codemode 无关。
+- ⚠ 迁移期要改 profile 的 `cordis.patch.yml`：**删掉 `autoReasoning: true`**。
+  该键已不在 codemode 的 `CodeModeConfig` 里，而 cordis 按整条 entry 校验配置 ——
+  留着未知键会让整条 `plugin-codemode` 不激活，表现为「codemode 工具凭空消失」。
+
 ## 与旧实现的差异：子代理现在也 auto
 
 宿主 `dsh-subagent/lib/index.js` 的 `resolveChildAgentOptions()`（L442–451）：
