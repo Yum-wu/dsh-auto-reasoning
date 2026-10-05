@@ -33,33 +33,49 @@ test('接管判据:哨兵 / 自己回音 / undefined(换模型子代理) 三条�
 test('接管判据:用户手选档位(≠我上次写的)一律放行', () => {
   const r = shouldTakeOver({ reasoningEffort: 'low' }, 'high');
   assert.equal(r.take, false);
-  assert.equal(r.via, 'none');
+  // 2026-10-05 语义反转后，这里从 'none' 改名为 'handpicked' ——
+  // 放行结论不变，但胶囊要靠这个名字显示「已让位给你手选的档位」，不再静默。
+  assert.equal(r.via, 'handpicked');
 });
 
 test('接管判据:本插件从未写过(previousMine=undefined)时,具体档位不接管', () => {
   assert.equal(shouldTakeOver({ reasoningEffort: 'medium' }, undefined).take, false);
 });
 
-// ── 强制接管(UI 点击授权)────────────────────────────────────────────────
-test('强制接管:forced=true 时任何 incoming 都接管,含用户手选档位', () => {
+// ── 严格接管(UI 点击授权)────────────────────────────────────────────────
+test('严格模式:strict=true 时任何 incoming 都接管,含用户手选档位', () => {
   assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined, true).via, 'forced');
   assert.equal(shouldTakeOver({ reasoningEffort: 'high' }, 'high', true).via, 'forced');
   assert.equal(shouldTakeOver({ reasoningEffort: 'auto' }, undefined, true).via, 'forced');
 });
 
-test('强制接管:forced 优先于其它判据(via 恒为 forced)', () => {
+test('严格模式:strict 优先于其它判据(via 恒为 forced)', () => {
   assert.equal(shouldTakeOver({ reasoningEffort: 'auto' }, 'auto', true).via, 'forced');
   assert.equal(shouldTakeOver({ reasoningEffort: undefined }, undefined, true).via, 'forced');
 });
 
-test('强制接管默认关闭:不传第三参时行为与从前完全一致', () => {
-  assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined).take, false);
-  assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined, false).take, false);
-  assert.equal(shouldTakeOver({ reasoningEffort: 'auto' }, undefined, false).via, 'sentinel');
+// ── 默认接管 + 手选让位(2026-10-05 语义反转)─────────────────────────────
+test('默认(非严格):哨兵 / 回音 / 孤儿 三条仍接管', () => {
+  assert.equal(shouldTakeOver({ reasoningEffort: 'auto' }, undefined, false).take, true);
+  assert.equal(shouldTakeOver({ reasoningEffort: 'high' }, 'high', false).via, 'echo');
+  assert.equal(shouldTakeOver({ reasoningEffort: undefined }, 'high', false).via, 'orphan');
 });
 
-test('强制接管:只有显式 true 才算开启,不接受 truthy 值', () => {
-  // 强制接管是破坏用户显式选择的操作，宁可漏开不可误开。
+test('默认(非严格):incoming 是本插件没写过的具体档位 = 用户手选 → 让位', () => {
+  // 「默认接管、遇手选中断」的全部实现就在这里，不依赖任何额外状态：
+  // auto 接管后把自己选的档位写进 header，下一轮 incoming === 上次写的 → isMyEcho → 继续接管；
+  // 用户一旦手选，incoming 变成别的档位 → 三条都不命中 → 让位。
+  assert.deepEqual(shouldTakeOver({ reasoningEffort: 'low' }, undefined, false), { take: false, via: 'handpicked' });
+  assert.deepEqual(shouldTakeOver({ reasoningEffort: 'high' }, 'low', false), { take: false, via: 'handpicked' });
+  assert.deepEqual(shouldTakeOver({ reasoningEffort: 'medium' }, 'high', false), { take: false, via: 'handpicked' });
+});
+
+test('严格模式:能压过手选 —— 手选期间回到 auto 的唯一出口', () => {
+  assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, 'high', true).take, true);
+});
+
+test('严格模式:只有显式 true 才算开启,不接受 truthy 值', () => {
+  // 严格模式会覆盖用户显式选择，宁可漏开不可误开。
   for (const v of ['true', 1, {}, 'yes', []]) {
     assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined, v).take, false, `不应因 ${JSON.stringify(v)} 开启`);
   }
