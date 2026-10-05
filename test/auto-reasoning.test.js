@@ -17,6 +17,7 @@ import {
   textOfContent,
 } from '../lib/index.js';
 import { scoreTaskComplexity, projectEffortOntoLadder, decideReasoningEffort } from '../lib/auto-reasoning.js';
+import { hashPrompt, buildCacheKey, EFFORT_CRITERIA } from '../lib/jev-client.js';
 
 test('哨兵值是 auto，且不属 cordis 合法档位', () => {
   assert.equal(AUTO_EFFORT_SENTINEL, 'auto');
@@ -104,6 +105,64 @@ test('阶梯投影:空阶梯 / 单档阶梯', () => {
 test('规则评分:资金/并发高危得 9,日常问答得 2', () => {
   assert.equal(scoreTaskComplexity('帮我查一下资金风控死锁状态机').score, 9);
   assert.equal(scoreTaskComplexity('今天天气怎么样').score, 2);
+});
+
+// ── 缓存键:2026-10-05 修的串味缺陷 ──────────────────────────────────────
+test('hashPrompt:确定性,同输入必同输出', () => {
+  assert.equal(hashPrompt('abc'), hashPrompt('abc'));
+  assert.notEqual(hashPrompt('abc'), hashPrompt('abd'));
+});
+
+test('缓存键:前 300 字符相同但后面不同 → 必须不同键(原缺陷)', () => {
+  // 原实现是 prompt.slice(0,300) 做键 —— 下面两条会共用同一条决策，
+  // 而那条决策恰恰是「思考档位」：把资金死锁排查当成今天天气来定档，代价实且完全静默。
+  const prefix = '先看一下这个项目的结构，然后'.padEnd(300, '。');
+  const A = `${prefix}\n【任务A】今天天气怎么样？`;
+  const B = `${prefix}\n【任务B】排查分布式死锁：爆仓清算并发写账户导致资金状态机卡死。`;
+  assert.equal(A.slice(0, 300), B.slice(0, 300), '前置条件:前 300 字符确实完全相同');
+  assert.notEqual(buildCacheKey('e', 'm', A), buildCacheKey('e', 'm', B), '★修复:两者不得共用缓存键');
+});
+
+test('缓存键:完全相同的 prompt 仍然命中缓存(别把缓存改没了)', () => {
+  const P = '把这个函数改成 O(n) 并说明为什么正确。';
+  assert.equal(buildCacheKey('e', 'm', P), buildCacheKey('e', 'm', P));
+});
+
+test('缓存键:endpoint / model 不同则键不同', () => {
+  const P = '同样的任务描述';
+  assert.notEqual(buildCacheKey('e1', 'm', P), buildCacheKey('e2', 'm', P));
+  assert.notEqual(buildCacheKey('e', 'm1', P), buildCacheKey('e', 'm2', P));
+});
+
+test('缓存键:长度参与哈希,不同长度即使碰撞前缀也不混', () => {
+  const P = 'x'.repeat(500);
+  assert.notEqual(buildCacheKey('e', 'm', P), buildCacheKey('e', 'm', P + 'y'));
+});
+
+// ── criteria 覆盖度(2026-10-05 对齐官方分类法)──────────────────────────
+test('criteria:五档齐全且都非空', () => {
+  for (const k of ['low', 'medium', 'high', 'xhigh', 'max']) {
+    assert.ok(EFFORT_CRITERIA[k]?.length > 10, `${k} 的描述缺失或过短`);
+  }
+});
+
+test('criteria:low 必须覆盖 tool-use/planning/search(旧版漏了整类)', () => {
+  const low = EFFORT_CRITERIA.low;
+  for (const kw of ['工具', '规划', '搜索', '执行']) {
+    assert.ok(low.includes(kw), `low 描述缺「${kw}」—— 这类日常会话会被误抬到 medium`);
+  }
+});
+
+test('criteria:max 必须覆盖创造性深度工作(用户 2026-10-05 指出旧版只写资金场景)', () => {
+  const max = EFFORT_CRITERIA.max;
+  for (const kw of ['死锁', '爆仓', '算法重新设计', '边界']) {
+    assert.ok(max.includes(kw), `max 描述缺「${kw}」`);
+  }
+});
+
+test('criteria:xhigh 必须写明需要实测评估才用(官方原文门槛)', () => {
+  assert.ok(EFFORT_CRITERIA.xhigh.includes('评估') || EFFORT_CRITERIA.xhigh.includes('实测'),
+    '官方要求 xhigh「only use when your evals show a clear benefit」');
 });
 
 test('端到端规则决策产出合法档位', () => {

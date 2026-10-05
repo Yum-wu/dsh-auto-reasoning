@@ -82,6 +82,61 @@ GET /api/auto-reasoning.effort?sessionId=<sid>
   该键已不在 codemode 的 `CodeModeConfig` 里，而 cordis 按整条 entry 校验配置 ——
   留着未知键会让整条 `plugin-codemode` 不激活，表现为「codemode 工具凭空消失」。
 
+## ⚠ effort 是**软引导**，本插件设定的是倾向，不是「决定思考深度」
+
+这是最容易误解的一点，写在最前面。两家官方文档口径一致（2026-10-05 实测抓取）：
+
+> **Anthropic**：「Claude's thinking is **adaptive**: the model evaluates each request and
+> **decides for itself** whether to think and how much」；effort "acts as **soft guidance**"；
+> "**No level guarantees a thinking block on every request**"
+>
+> **OpenAI**：「The models also reason **adaptively across reasoning efforts**, using fewer
+> tokens for simpler tasks and thinking harder for complex tasks」
+
+也就是说：**本插件选出档位之后，模型仍会逐请求自己决定要不要想、想多少。**
+可验证的是「映射落在该模型声明的合法档位内」，**不是**「模型真的想了多少」。
+
+> 由此也能解释一个曾让我误判的实测现象：同一模型上 `high` 的推理长度反而低于 `medium`、
+> `xhigh` 只有 `minimal` 同级 —— **这不是映射 bug，是软引导的正常表现**。
+> 别再用「推理长度是否随档位单调」去验证映射。
+
+## 校准闭环（2026-10-05 新增）
+
+criteria 改过多次而**此前毫无验证手段** —— 每次都是拍脑袋，无法回答「改完是变好还是变坏」。
+依 Anthropic 官方要求（"treat it like any other prompt change: **measure before you ship**"）补上：
+
+```bash
+npm run bench          # 在线，真实 SystemOne 路径，打印对齐率与分档召回
+npm run bench:offline  # 离线，只测规则兜底引擎，不打网络
+```
+
+**当前基线（2026-10-05，37 条样本 / 34 条计门禁）**
+
+| | 离线（规则兜底） | 在线（SystemOne 真实路径） |
+|---|---|---|
+| 对齐率 | 64.7% | **94.1%** |
+| 门禁阈值 | **60%** | **90%** |
+| `low` 召回 | 67% | **100%** |
+| `max` 召回 | 33% | 56% |
+
+`low` 召回从 50% 提到 100%，印证了改动的核心价值：旧 criteria 把「跑命令 / grep / 搜索 /
+写脚本」全判成 medium，纯烧 token —— 而 OpenAI 官方对 `low` 的定义明确包含
+**tool-use、planning、search**。
+
+**在线与离线用不同阈值是刻意的**：在线走语义判定，才是真实路径，理应高对齐率；离线是
+关键词表兜底，它的职责是「网络挂时链路不断」而非「精确分类」。拿 90% 卡它等于逼着关键词表
+去拟合 SystemOne，那只会制造一批新的误判。
+
+**门禁**：`test/alignment-gate.test.js` 把对齐率挂进 `npm test`，低于阈值即红。
+另有两道护栏：每档样本量不足 5 条时测试失败（样本太少指标没有统计意义）；
+日常工具型任务被判到 medium 以上时失败（省 token 的底线）。
+
+标了 `debatable: true` 的样本**不计门禁** —— 那是「我们和模型的分歧，且选择相信模型」。
+删掉等于藏起分歧，改标注等于用结果拟合期望，两者都会让指标失去它唯一的作用。
+
+**已知短板**：`xhigh` 召回 0/6。SystemOne 倾向直接给 `high` 或 `max`，中间这档很难命中。
+**当前样本量不足以判断这是 criteria 的问题还是档位本身的特性 —— 先补样本，不要调参。**
+
 ## 与旧实现的差异：子代理现在也 auto
 
 宿主 `dsh-subagent/lib/index.js` 的 `resolveChildAgentOptions()`（L442–451）：

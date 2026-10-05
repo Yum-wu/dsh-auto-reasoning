@@ -7,6 +7,41 @@
 DSH 插件（Cordis bundle）。把模型配置里的 `reasoningEffort: auto` 哨兵，换算成
 **该模型自己的合法档位**。零构建、零依赖、纯 ESM。
 
+## ⚠ 第一条要知道的：effort 是**软引导**，本插件不是「决定思考深度」
+
+两家官方文档口径一致（2026-10-05 实测抓取，非记忆）：
+
+| 厂商 | 原文 |
+|---|---|
+| Anthropic | "Claude's thinking is **adaptive**: the model evaluates each request and **decides for itself** whether to think and how much"；effort "acts as **soft guidance**"；"**No level guarantees a thinking block on every request**" |
+| OpenAI | "The models also reason **adaptively across reasoning efforts**, using fewer tokens for simpler tasks and thinking harder for complex tasks" |
+
+**推论（这条最容易让人踩坑）**：本插件做的是**设定倾向（posture）**，最终思考多少仍由模型
+逐请求自己决定。因此：
+
+- **不要**在 README / UI / 日志里声称「本插件决定了思考深度」，那是误导；
+- **不要**用「推理长度是否随档位单调」验证映射对不对。2026-10-05 实测：`high` 的推理长度
+  反而低于 `medium`、`xhigh` 只有 `minimal` 同级 —— **不是 bug，是软引导的表现**。
+  能验证的是「映射是否落在该模型声明的合法档位内」（`resolveModelInfo` 取的阶梯）。
+
+## 改 criteria 之前必须知道的事
+
+**criteria 改过多次而此前毫无验证手段。** 2026-10-05 依 Anthropic 官方
+（"measure before you ship"）补了校准闭环：
+
+```powershell
+npm run bench          # 在线，真实 SystemOne 路径，打印对齐率与分档召回
+npm run bench:offline  # 离线，只测规则兜底引擎，不打网络（CI 无网时用）
+```
+
+- 样本集在 `benchmarks/effort-alignment.mjs`，**扩样本优先于调参**：
+  当前 37 条、`xhigh` 仅 6 条 —— 样本不足时调参就是在过拟合。
+- 对齐率门禁 **90%**，已挂进 `npm test`（`test/alignment-gate.test.js`）。
+- 标了 `debatable: true` 的样本**不计门禁** —— 那是「我们和模型的分歧，且选择相信模型」。
+  删掉等于藏起分歧，改标注等于用结果拟合期望，两者都会让这个指标失去它唯一的作用。
+
+改完 criteria 的正确流程：**先 `bench` 看改后 → 再 `bench:offline` 对照 → 确认不是网络抖动 → 才提交**。
+
 ## 不可动的架构事实（改之前先读）
 
 **1. 唯一挂载点是 `agent/request`。**
@@ -83,8 +118,12 @@ DSH 把 AGENTS.md / runtime-context / skill-catalog 也当 user 消息注入，
 node --test test/*.test.js
 ```
 
-22 例，覆盖哨兵合法性、四条接管判据（含强制接管的 truthy 拒绝）、阶梯投影
-（降级 / xhigh / max / 空阶梯 / 单档）、取数三条路与脏输入、三条退出去向。
+37 例，覆盖哨兵合法性、四条接管判据（含严格模式的 truthy 拒绝与 handpicked 让位）、
+阶梯投影（降级 / xhigh / max / 空阶梯 / 单档）、取数三条路与脏输入、三条退出去向、
+缓存键防串味、criteria 覆盖度，以及**档位对齐率门禁**（含样本量下限与日常工具型底线）。
+
+`npm test` 会打网络跑真实 SystemOne 判定（这是门禁有意义的前提）；
+无网环境用 `DISABLE_JEV_REMOTE=1 node --test test/*.test.js` 退化为离线规则引擎。
 
 改行为先改测试。测试是本插件唯一的回归防线（宿主不提供）。
 
