@@ -250,3 +250,14 @@ test('每条决策都带 model 与 at,便于排障对账', () => {
   assert.ok(Date.parse(d.at) > 0);
   assert.equal(d.depth, 0);
 });
+
+test('单档模型标记:ladder 为 1 时自动标记 singleTier=true, 多档或空阶梯为 false', () => {
+  const single = createAutoEffortDecision({ sessionId: 's', effort: 'high', model: 'combo/ds-flash', ladder: ['high'] });
+  assert.equal(single.singleTier, true);
+
+  const multi = createAutoEffortDecision({ sessionId: 's', effort: 'high', model: 'm', ladder: ['low', 'high'] });
+  assert.equal(multi.singleTier, false);
+
+  const noLadder = createAutoEffortDecision({ sessionId: 's', effort: null, model: 'm', ladder: [] });
+  assert.equal(noLadder.singleTier, false);
+});
