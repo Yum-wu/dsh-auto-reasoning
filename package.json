@@ -27,7 +27,9 @@
     "test": "node --test test/*.test.js",
     "bench": "node benchmarks/effort-alignment.mjs",
     "bench:offline": "node benchmarks/effort-alignment.mjs --offline",
-    "bench:variance": "node benchmarks/variance.mjs 6"
+    "bench:variance": "node benchmarks/variance.mjs 6",
+    "bench:real": "node benchmarks/real-prompts.mjs",
+    "bench:real:label": "node benchmarks/real-prompts.mjs --label 120"
   },
   "files": [
     "lib",

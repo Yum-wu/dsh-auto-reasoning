@@ -117,19 +117,19 @@ test('规则评分:资金/并发高危得 9,已识别的日常工具型得 2', (
   assert.equal(scoreTaskComplexity('帮我 grep 一下所有 TODO 的位置').score, 2);
 });
 
-// ── 默认档策略:2026-10-06 由 low 改为 medium ──────────────────────────────
-test('未命中任何特征时默认给 medium(不是 low)—— 未知不等于简单', () => {
-  // 依据官方口径：OpenAI 把 medium 定义为 "the default for most workloads"，
-  // low 是「明确知道任务简单」时才用的档。「正则没匹配上」只说明我们不知道。
-  //
-  // 这是刻意的**非对称**取舍：复杂任务被低估要重做（代价高、用户可见），
-  // 简单任务被高估只多花一点 token（代价低、静默）。
+// ── 默认档策略:2026-10-06 定案为 low（此前在 low/medium 之间反复过两次）──────
+test('未命中任何特征时默认给 low —— 依据是真实 prompt 分布，不是直觉', () => {
+  // 定案依据（120 条真实 prompt + SystemOne 打标，见 lib/auto-reasoning.js 注释）：
+  //   未命中批 n=39，SystemOne 判 low 占 71.8%；默认 medium 只对 23.1%。
+  //   未命中批长度中位 17 字符 —— 几乎全是短对话式追问，本就不需要深推理。
   const r = scoreTaskComplexity('帮我看看这个东西行不行');
-  assert.equal(r.score, 5);
-  assert.equal(r.reason, 'unmatched_default_medium');
+  assert.equal(r.score, 2);
+  assert.equal(r.reason, 'unmatched_default_low');
 
   // 反例守卫：真正的高危特征仍必须先被前面的分支拦下，不能被默认档吃掉
   assert.equal(scoreTaskComplexity('这个我不确定，可能是死锁').score, 9);
+  // 反例守卫：常规开发特征也不得掉到默认档
+  assert.equal(scoreTaskComplexity('帮我实现一个分页接口').score, 5);
 });
 
 test('低危过滤只收「读取已有内容」的意图,不收「产出新东西」的意图', () => {
