@@ -1,0 +1,17 @@
+# dsh-auto-reasoning — 自动思考程度（会话级哨兵 auto）
+#
+# 官方 0.2.0 规范：cordis 的 reasoningEfforts 档位枚举只有 off/minimal/low/medium/high/xhigh/max，
+# 'auto' **不是合法档位**，直接写进模型配置会让该条 entry 整条不激活（见仓库 docs/known-issues.md 2026-10-04）。
+# 所以本插件不声明任何模型档位，只在 agent/request 瀑布里把 'auto' 哨兵换算成该模型的合法档位。
+#
+# 本 bundle 只做一件事：向 profile 的 Loader 树 insert 这一行声明。
+# 不声明任何 dependencies / peerDependencies，也不写死运行时版本号 —— 一切从宿主解析。
+- insert:
+    - id: plugin-auto-reasoning
+      name: 'dsh-auto-reasoning'
+      config:
+        enabled: true
+        # 决策缓存条数上限（按会话 id，超出淘汰最旧）
+        decisionCap: 50
+        # 客户端胶囊轮询间隔(ms)
+        pollIntervalMs: 3000
