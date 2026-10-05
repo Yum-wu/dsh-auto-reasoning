@@ -29,7 +29,8 @@
     "bench:offline": "node benchmarks/effort-alignment.mjs --offline",
     "bench:variance": "node benchmarks/variance.mjs 6",
     "bench:real": "node benchmarks/real-prompts.mjs",
-    "bench:real:label": "node benchmarks/real-prompts.mjs --label 120"
+    "bench:real:label": "node benchmarks/real-prompts.mjs --label 120",
+    "bench:tier": "node benchmarks/tier-effect.mjs workbuddy2api/global:deepseek-v4.1-flash 6"
   },
   "files": [
     "lib",
