@@ -26,7 +26,8 @@
   "scripts": {
     "test": "node --test test/*.test.js",
     "bench": "node benchmarks/effort-alignment.mjs",
-    "bench:offline": "node benchmarks/effort-alignment.mjs --offline"
+    "bench:offline": "node benchmarks/effort-alignment.mjs --offline",
+    "bench:variance": "node benchmarks/variance.mjs 6"
   },
   "files": [
     "lib",

@@ -17,7 +17,17 @@ import {
   textOfContent,
 } from '../lib/index.js';
 import { scoreTaskComplexity, projectEffortOntoLadder, decideReasoningEffort } from '../lib/auto-reasoning.js';
-import { hashPrompt, buildCacheKey, EFFORT_CRITERIA } from '../lib/jev-client.js';
+import {
+  hashPrompt,
+  buildCacheKey,
+  EFFORT_CRITERIA,
+  DEFAULT_ENDPOINT,
+  DEFAULT_MODEL,
+  FALLBACK_ENDPOINT,
+  FALLBACK_MODEL,
+  pickFallbackKey,
+  parseRegQueryValue,
+} from '../lib/jev-client.js';
 
 test('哨兵值是 auto，且不属 cordis 合法档位', () => {
   assert.equal(AUTO_EFFORT_SENTINEL, 'auto');
@@ -102,9 +112,32 @@ test('阶梯投影:空阶梯 / 单档阶梯', () => {
   assert.equal(projectEffortOntoLadder(5, ['high']).target, 'high');
 });
 
-test('规则评分:资金/并发高危得 9,日常问答得 2', () => {
+test('规则评分:资金/并发高危得 9,已识别的日常工具型得 2', () => {
   assert.equal(scoreTaskComplexity('帮我查一下资金风控死锁状态机').score, 9);
-  assert.equal(scoreTaskComplexity('今天天气怎么样').score, 2);
+  assert.equal(scoreTaskComplexity('帮我 grep 一下所有 TODO 的位置').score, 2);
+});
+
+// ── 默认档策略:2026-10-06 由 low 改为 medium ──────────────────────────────
+test('未命中任何特征时默认给 medium(不是 low)—— 未知不等于简单', () => {
+  // 依据官方口径：OpenAI 把 medium 定义为 "the default for most workloads"，
+  // low 是「明确知道任务简单」时才用的档。「正则没匹配上」只说明我们不知道。
+  //
+  // 这是刻意的**非对称**取舍：复杂任务被低估要重做（代价高、用户可见），
+  // 简单任务被高估只多花一点 token（代价低、静默）。
+  const r = scoreTaskComplexity('帮我看看这个东西行不行');
+  assert.equal(r.score, 5);
+  assert.equal(r.reason, 'unmatched_default_medium');
+
+  // 反例守卫：真正的高危特征仍必须先被前面的分支拦下，不能被默认档吃掉
+  assert.equal(scoreTaskComplexity('这个我不确定，可能是死锁').score, 9);
+});
+
+test('低危过滤只收「读取已有内容」的意图,不收「产出新东西」的意图', () => {
+  // `输出` / `显示` / `打印` 单独出现时两种意图都可能，所以只收带补语的形态。
+  assert.equal(scoreTaskComplexity('把这个文件的第 42 行打印出来').score, 2);
+  assert.equal(scoreTaskComplexity('README 里「快速开始」这一节讲了什么？').score, 2);
+  // 「打印日志到文件」是开发任务，不该被 low 捞走
+  assert.notEqual(scoreTaskComplexity('实现一个把日志打印到文件的模块').score, 2);
 });
 
 // ── 缓存键:2026-10-05 修的串味缺陷 ──────────────────────────────────────
@@ -260,4 +293,51 @@ test('单档模型标记:ladder 为 1 时自动标记 singleTier=true, 多档或
 
   const noLadder = createAutoEffortDecision({ sessionId: 's', effort: null, model: 'm', ladder: [] });
   assert.equal(noLadder.singleTier, false);
+});
+
+test('备用通道常数对齐 tools/jev_suite/core/client.py 的双通道设计', () => {
+  assert.equal(FALLBACK_ENDPOINT, 'https://openrouter.ai/api/v1/systemone');
+  assert.equal(FALLBACK_MODEL, 'typesafe/jev-1.13');
+  // 备用端点必须与主端点不同，否则「切换」是空转（Python 侧同样以 endpoint 不等为前提）
+  assert.notEqual(FALLBACK_ENDPOINT, DEFAULT_ENDPOINT);
+  assert.notEqual(FALLBACK_MODEL, DEFAULT_MODEL);
+});
+
+test('备用密钥解析:专用变量优先于通用变量', () => {
+  assert.equal(
+    pickFallbackKey({ env: { JEV_FALLBACK_API_KEY: 'dedicated', OPENROUTER_API_KEY: 'generic' } }),
+    'dedicated',
+  );
+  assert.equal(pickFallbackKey({ env: { OPENROUTER_API_KEY: 'generic' } }), 'generic');
+});
+
+test('备用密钥解析:无 env 时 Windows 走注册表, 非 Windows 直接放弃', () => {
+  const reg = () =>
+    '\r\nHKEY_CURRENT_USER\\Environment\r\n    OPENROUTER_API_KEY    REG_SZ    sk-or-v1-abc\r\n\r\n';
+  assert.equal(pickFallbackKey({ env: {}, platform: 'win32', readRegistry: reg }), 'sk-or-v1-abc');
+
+  // 非 Windows 没有这个机制 —— 不能假装探测到了什么
+  let called = false;
+  assert.equal(
+    pickFallbackKey({ env: {}, platform: 'linux', readRegistry: () => { called = true; return reg(); } }),
+    '',
+  );
+  assert.equal(called, false, '非 Windows 不该执行注册表读取');
+});
+
+test('备用密钥解析:注册表读取抛错时降级为空串,不把异常抛给调用方', () => {
+  assert.equal(
+    pickFallbackKey({ env: {}, platform: 'win32', readRegistry: () => { throw new Error('reg not found'); } }),
+    '',
+  );
+});
+
+test('reg query 输出解析:命中取值, 未命中/脏输入返回空串', () => {
+  assert.equal(
+    parseRegQueryValue('    OPENROUTER_API_KEY    REG_SZ    sk-or-v1-x\r\n'),
+    'sk-or-v1-x',
+  );
+  assert.equal(parseRegQueryValue('ERROR: The system was unable to find the specified registry key'), '');
+  assert.equal(parseRegQueryValue(''), '');
+  assert.equal(parseRegQueryValue(null), '');
 });

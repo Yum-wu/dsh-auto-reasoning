@@ -13,6 +13,25 @@ import { GATE_ONLINE, GATE_OFFLINE, runAlignment } from '../benchmarks/effort-al
 
 const OFFLINE = process.argv.includes('--offline') || process.env.DISABLE_JEV_REMOTE === '1';
 
+/**
+ * 留出集基线（棘轮）—— 2026-10-06 首次实测。
+ *
+ * ⚠ **这个数很低，而它才是诚实的那个。**
+ *
+ * 上面那 34 条训练集跑出 100%，是因为我**照着它们的失败清单改正则**改出来的；
+ * 换一批没见过的措辞（留出集 v2，22 条），规则引擎只有 **36.4%**。
+ *
+ * 为什么留出集**不做硬门禁**、只做棘轮：
+ *   · 拿它当硬门禁，下一步必然是照着它的失败清单调参 —— 然后它就变成第二个训练集，
+ *     「留出集」三个字失去全部意义（`HELDOUT_SAMPLES` 注释里有完整纪律）；
+ *   · 但完全不卡它，这个数就会悄悄腐烂。
+ *   棘轮是两者的折中：**只禁止变差，不要求变好**。
+ *
+ * 容差 0.05 来自实测的运行间方差（同输入连跑，SystemOne 本身会给出不同档位）。
+ */
+const HELDOUT_BASELINE = 0.364;
+const HELDOUT_TOLERANCE = 0.05;
+
 test('档位对齐率不低于门禁阈值', { skip: false }, async () => {
   const report = await runAlignment({ offline: OFFLINE });
   // 阈值按运行模式取：**离线阈值更低是刻意的**，因为规则兜底引擎的职责是
@@ -70,4 +89,30 @@ test('低风险日常(读/查/跑命令)不得被判到 medium 以上 —— 这
     assert.equal(r.got, 'low', `「${p}」应判 low，实际 ${r.got} —— 日常工具型工作被抬高即在烧 token`);
   }
   assert.ok(SAMPLES.length >= 30, '样本集应持续扩充');
+});
+
+test('留出集必须存在且不得比基线更差(棘轮,只禁变差不求变好)', async () => {
+  const report = await runAlignment({ offline: true });
+  const h = report.heldout;
+
+  assert.ok(h.total >= 15, `留出集只有 ${h.total} 条，样本太少则泛化估计没有意义`);
+  // 反空转：留出集必须真的被跑过，而不是被某次改动静默清空
+  assert.equal(h.rows.length, h.total, '留出集行数与声明数不一致 —— 有样本没被执行');
+
+  const floor = HELDOUT_BASELINE - HELDOUT_TOLERANCE;
+  assert.ok(
+    h.accuracy >= floor,
+    `留出集泛化估计 ${(h.accuracy * 100).toFixed(1)}% 低于棘轮下限 ${(floor * 100).toFixed(1)}%\n` +
+      `（基线 ${(HELDOUT_BASELINE * 100).toFixed(1)}% + 容差 ${(HELDOUT_TOLERANCE * 100).toFixed(0)}%）\n` +
+      `未命中：\n  ${h.rows.filter((r) => !r.ok).map((r) => `${r.got}←期望${r.expected.join('/')}「${r.p.slice(0, 24)}」`).join('\n  ')}\n` +
+      '⚠ 若你正想「照着上面这份清单改正则」—— 停手，那会把留出集变成第二个训练集。\n' +
+      '  正确做法：改 SAMPLES 那边的判定逻辑，或重写一批新的留出样本并更新 HELDOUT_BASELINE。',
+  );
+});
+
+test('留出集与训练集不得有重复样本(否则等于自己考自己)', async () => {
+  const { SAMPLES, HELDOUT_SAMPLES } = await import('../benchmarks/effort-alignment.mjs');
+  const train = new Set(SAMPLES.map((s) => s.p));
+  const dup = HELDOUT_SAMPLES.filter((s) => train.has(s.p));
+  assert.deepEqual(dup, [], `留出集里出现了训练集已有的 prompt：${dup.map((d) => d.p).join(' / ')}`);
 });
