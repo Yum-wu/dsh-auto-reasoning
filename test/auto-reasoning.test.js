@@ -40,6 +40,31 @@ test('接管判据:本插件从未写过(previousMine=undefined)时,具体档位
   assert.equal(shouldTakeOver({ reasoningEffort: 'medium' }, undefined).take, false);
 });
 
+// ── 强制接管(UI 点击授权)────────────────────────────────────────────────
+test('强制接管:forced=true 时任何 incoming 都接管,含用户手选档位', () => {
+  assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined, true).via, 'forced');
+  assert.equal(shouldTakeOver({ reasoningEffort: 'high' }, 'high', true).via, 'forced');
+  assert.equal(shouldTakeOver({ reasoningEffort: 'auto' }, undefined, true).via, 'forced');
+});
+
+test('强制接管:forced 优先于其它判据(via 恒为 forced)', () => {
+  assert.equal(shouldTakeOver({ reasoningEffort: 'auto' }, 'auto', true).via, 'forced');
+  assert.equal(shouldTakeOver({ reasoningEffort: undefined }, undefined, true).via, 'forced');
+});
+
+test('强制接管默认关闭:不传第三参时行为与从前完全一致', () => {
+  assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined).take, false);
+  assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined, false).take, false);
+  assert.equal(shouldTakeOver({ reasoningEffort: 'auto' }, undefined, false).via, 'sentinel');
+});
+
+test('强制接管:只有显式 true 才算开启,不接受 truthy 值', () => {
+  // 强制接管是破坏用户显式选择的操作，宁可漏开不可误开。
+  for (const v of ['true', 1, {}, 'yes', []]) {
+    assert.equal(shouldTakeOver({ reasoningEffort: 'low' }, undefined, v).take, false, `不应因 ${JSON.stringify(v)} 开启`);
+  }
+});
+
 test('阶梯投影:想要 high 时给 high 而不是 medium', () => {
   assert.equal(projectEffortOntoLadder(8, ['low', 'medium', 'high']).target, 'high');
   assert.equal(projectEffortOntoLadder(9, ['low', 'medium', 'high']).target, 'high');

@@ -36,13 +36,41 @@ DSH 把 AGENTS.md / runtime-context / skill-catalog 也当 user 消息注入，
 
 ## 改 `shouldTakeOver` 时的红线
 
-三条接管判据（`sentinel` / `echo` / `orphan`）缺一不可，尤其第三条：
-宿主 `dsh-subagent/lib/index.js:450` 在「路由变了且未显式指定档位」时执行
-`delete resolved.reasoningEffort`，把父会话的 `auto` 哨兵一并删掉。
-**删掉 `orphan` 分支 = 换模型的子代理彻底脱离 auto。**
+四条接管判据（`sentinel` / `echo` / `orphan` / `forced`）缺一不可：
 
-用户**手选**的档位一律不接管（会持久化进 request header，进来时是具体档位）。
-显式档位是调用方的明确意图，不要覆盖。
+- 缺 `orphan` —— 宿主 `dsh-subagent/lib/index.js:450` 在「路由变了且未显式指定档位」时执行
+  `delete resolved.reasoningEffort`，把父会话的 `auto` 哨兵一并删掉。
+  **删掉它 = 换模型的子代理彻底脱离 auto。**
+- 缺 `forced` —— 用户点了 UI 胶囊的「强制接管」却静默不生效，表现为「按钮点了没用」。
+
+用户**手选**的档位默认一律不接管（会持久化进 request header，进来时是具体档位）。
+`forced` 是唯一例外，且**必须**同时满足三条，缺一都是安全缺陷：
+
+1. **默认关闭**，只由用户点击授权（内存态、有上限、重启即失效）；
+2. **只认显式 `=== true`**，不接受 truthy —— 这是破坏用户显式选择的操作，宁可漏开不可误开；
+3. **按 sessionId 隔离**，不做全局开关。
+
+## 「强制接管」为什么技术上做得到（本插件跑在最外层）
+
+本插件以 `prepend: true` 挂 `agent/request`，是**最外层**，拿到的 `resolved` 已被内层
+`dsh-agent/lib/index.js:181-192` 的后置拾取器用 UI selection 覆盖过。
+
+**这不是推理，是实测**：旧会话里插件报 `lastIncoming: max` —— 那个 `max` 正是内层写入的，
+不是 `AgentOptions` 里的 `auto`（若本插件跑在内层，看到的应该是 `auto`）。
+所以 `forced` 下改写返回值里的 `reasoningEffort`，能直接压过 UI 手选。
+
+## 写路由的鉴权边界
+
+`POST /api/auto-reasoning.force` **不碰任何凭据**，鉴权由宿主施加。
+依据是实测，不是读代码猜的：
+
+| 探测 | 结果 |
+|---|---|
+| 无 cookie POST `/api/auto-reasoning.force` | **401** |
+| 有 cookie POST 同一路径（路由未注册时） | 404 |
+
+即宿主把鉴权放在**路由匹配之前**（统一 middleware）。
+⚠ 若哪天宿主改成路由内鉴权，这个写路由会裸奔 —— 改动前重跑上面那两条探测。
 
 ## 退出去向必须显式
 
@@ -55,8 +83,8 @@ DSH 把 AGENTS.md / runtime-context / skill-catalog 也当 user 消息注入，
 node --test test/*.test.js
 ```
 
-18 例，覆盖哨兵合法性、三条接管判据、阶梯投影（降级 / xhigh / max / 空阶梯 / 单档）、
-取数三条路与脏输入、三条退出去向。
+22 例，覆盖哨兵合法性、四条接管判据（含强制接管的 truthy 拒绝）、阶梯投影
+（降级 / xhigh / max / 空阶梯 / 单档）、取数三条路与脏输入、三条退出去向。
 
 改行为先改测试。测试是本插件唯一的回归防线（宿主不提供）。
 

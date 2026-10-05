@@ -94,13 +94,42 @@ if ((resolved.provider !== parentProvider || resolved.model !== parentModel)
 
 | via | 条件 | 含义 |
 |---|---|---|
+| `forced` | 用户点了强制接管 | 无视一切 UI 选择 |
 | `sentinel` | `incoming === 'auto'` | 会话首次请求，seed 来自 AgentOptions |
 | `echo` | `incoming === 本会话上次我写的档位` | 是我的回音 → 每轮重新评估 |
 | `orphan` | `incoming === undefined` | 换模型子代理丢了继承档位 |
 
 **用户手选的档位一律不接管** —— 它会持久化进 request header，进来时是具体档位，
-不命中上述三条中的任何一条（除非恰好等于我上次写的，此时由宿主
+不命中上述任何一条（除非恰好等于我上次写的，此时由宿主
 `dsh-agent` 的后置拾取器重新覆盖用户选择，用户意图始终优先）。
+
+## 强制接管（点胶囊切换）
+
+胶囊可点击，在两个模式间切换：
+
+| 模式 | 胶囊显示 | 行为 |
+|---|---|---|
+| **跟随 UI**（默认） | `Auto (high) · 8/10` | 只在 `sentinel` / `echo` / `orphan` 时接管。**用户手选优先，永不覆盖** |
+| **强制接管**（点击开启） | `⚡强制接管 (high) · 8/10`（加粗描边） | 该会话**所有**请求的档位都由插件决定，连 UI 手选也覆盖 |
+
+再点一次切回。三条安全约束（详见 [AGENTS.md](AGENTS.md)）：
+
+- **默认关闭**，只由点击授权；内存态、有上限、**重启即失效** —— 不会留下「静默接管」的暗状态；
+- **只认显式 `true`**，不接受 truthy 值；
+- **按 `sessionId` 隔离**，不做全局开关。
+
+```
+GET  /api/auto-reasoning.effort?sessionId=…   →  …, "forced": true, "forcedSessions": […]
+POST /api/auto-reasoning.force  { "sessionId": "…", "forced": true }  →  { ok: true, forced: true }
+```
+
+**为什么技术上压得过 UI 手选**：本插件以 `prepend: true` 挂 `agent/request`，是最外层，
+拿到的 `resolved` 已被内层 `dsh-agent/lib/index.js:181-192` 的后置拾取器用 UI selection 覆盖过
+（实测：旧会话里插件报 `lastIncoming: max`，那正是内层写入的值，不是 `AgentOptions` 里的 `auto`）。
+所以改写返回值里的 `reasoningEffort` 就能直接压过它。
+
+写路由**不碰任何凭据** —— 宿主鉴权在路由匹配之前（实测：无 cookie POST → 401，
+有 cookie 但路由未注册 → 404）。
 
 ## 兜底
 
