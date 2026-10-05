@@ -70,17 +70,28 @@ function binom(n, k) {
   return r;
 }
 
-console.log(`模型: ${model}   对比: ${LOW} vs ${HIGH}   重复 ${REPS} 轮（背靠背交替）\n`);
+console.log(`模型: ${model}   对比: ${LOW} vs ${HIGH}   重复 ${REPS} 轮（背靠背 + 顺序反平衡）\n`);
+// ⚠ 顺序反平衡是**必须的**，不是讲究。
+// 2026-10-06 发现本基准此前恒定「先 LOW 后 HIGH」，于是任何**顺序效应**
+// （预热、缓存命中、上游负载随时间漂移）都会被记成「HIGH 更大」，
+// 与档位效应完全混淆 —— 那一轮 6/6 同向的「p=0.016」因此不可信。
+// 现在奇偶轮换顺序，顺序效应在配对差值里对称抵消。
 const diffs = [];
 for (let i = 0; i < REPS; i++) {
-  const l = await run(LOW);
-  const h = await run(HIGH);
+  const lowFirst = i % 2 === 0;
+  const first = await run(lowFirst ? LOW : HIGH);
+  const second = await run(lowFirst ? HIGH : LOW);
+  const l = lowFirst ? first : second;
+  const h = lowFirst ? second : first;
   if (l.err || h.err) {
     console.log(`  #${i + 1} 出错 ${LOW}=${l.err ?? l.r} ${HIGH}=${h.err ?? h.r}`);
     continue;
   }
   diffs.push(h.r - l.r);
-  console.log(`  #${i + 1}  ${LOW}=${l.r}  ${HIGH}=${h.r}  Δ=${h.r - l.r}`);
+  console.log(
+    `  #${i + 1} 顺序=${lowFirst ? `${LOW}→${HIGH}` : `${HIGH}→${LOW}`}  ` +
+      `${LOW}=${l.r}  ${HIGH}=${h.r}  Δ=${h.r - l.r}`,
+  );
 }
 
 if (diffs.length < 3) {
@@ -101,6 +112,11 @@ signP /= 2 ** n;
 console.log(`\n  差值 Δ(${HIGH} − ${LOW}) = [${diffs.join(', ')}]`);
 console.log(`  n=${n}  均值=${mean.toFixed(1)}  sd=${sd.toFixed(1)}  配对 t=${t.toFixed(2)} (df=${n - 1})`);
 console.log(`  方向一致 ${pos}/${n}  符号检验单尾 p=${signP.toFixed(3)}`);
+console.log(
+  '\n  ⚠ effort 是**软引导**（见 AGENTS.md）：模型逐请求自适应，推理长度不是档位的单调函数。\n' +
+    '    本基准只能检出**大效应**，检不出 ≠ 无效应。要判「档位是否真的透传到上游」，\n' +
+    '    更硬的判据是上游的 `reasoning_supported_efforts` 声明（wb2api /v1/models）。',
+);
 console.log(
   signP <= 0.05
     ? '\n  ✔ 档位有可检出效果 —— 有扩档依据'
