@@ -146,7 +146,7 @@ retry-after: 15192
 **密钥从哪来**（`pickFallbackKey`，顺序不可调）：
 `JEV_FALLBACK_API_KEY` → `OPENROUTER_API_KEY` → **Windows 读注册表** `HKCU\Environment`。
 
-> 为什么需要读注册表：DSH 子进程的环境会被 scrub（见 `~/.dsh/AGENTS.md`），
+> 为什么需要读注册表：DSH 子进程的环境会被 scrub（见 `Desktop\DeepSeekHarness\AGENTS.md` 的「本机运维硬规则」），
 > 而用户级环境变量也可能晚于 DSH 进程启动才写入，此时 `process.env` 是旧快照。
 > 注册表是唯一能拿到实时值的路径。**非 Windows 没有这个机制，探测不到就静默禁用备用通道。**
 
