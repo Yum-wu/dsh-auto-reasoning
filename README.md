@@ -306,7 +306,7 @@ skill-catalog 也当 user 消息注入且排在真实提示词之后，只看 ro
 ## 测试
 
 ```powershell
-node --test test/*.test.js   # 46 例（含双通道密钥解析、默认档策略、留出集棘轮）
+node --test test/*.test.js   # 48 例（含双通道密钥解析、默认档策略、留出集棘轮）
 npm run bench                # 37 条训练集 + 22 条留出集，打印判定来源
 npm run bench:offline        # 同上但不打网络
 npm run bench:variance       # 连跑 6 轮量化判定方差（每轮约 1 分钟）
