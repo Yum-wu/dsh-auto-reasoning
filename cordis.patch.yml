@@ -15,3 +15,8 @@
         decisionCap: 50
         # 客户端胶囊轮询间隔(ms)
         pollIntervalMs: 3000
+        # 「不适用」出口（默认关）：给 SystemOne 一个「这条消息没有可判定的任务内容」的选项。
+        # ⚠ 该档与 low 的 criteria 正面重叠（low 已含「简单问答」），开了会改变**全部 5 档**
+        #   的判定分布。必须先用 `npm run bench`（在线、真实 SystemOne 路径）实测
+        #   对齐率与分档召回没有退化，才改成 true。依据本插件 AGENTS.md「改行为先改测试」。
+        declineOption: false
