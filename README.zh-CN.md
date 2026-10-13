@@ -2,6 +2,12 @@
 
 > [English](README.md) | **简体中文**
 
+> ⚠ **2026-10-13 起冻结存档。** 运行时半区已并入
+> [`dsh-jev-preset`](https://github.com/Yum-wu/dsh-jev-preset) 的 `lib/`，
+> 在那里以 `plugin-jev-runtime` 声明。本机 profile 的 `dependencies` 与
+> `dsh.profile.bundles` **两处都已移除本包** ⇒ 改这里的代码不再生效。
+> 本仓保留仅作存档与独立复用。
+
 
 自动思考程度（Auto Reasoning Effort）—— 按任务复杂度把本次请求的 `reasoningEffort`
 投影到**该模型自己的合法档位阶梯**上。会话级哨兵 `auto`，覆盖子代理。

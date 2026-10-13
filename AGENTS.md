@@ -1,5 +1,15 @@
 # AGENTS.md — dsh-auto-reasoning
 
+> ⚠⚠ **本仓 2026-10-13 起冻结存档,不再是活代码。** 运行时半区已**并入**
+> `Desktop\DeepSeekHarness\plugins\dsh-jev-preset` 的 `lib/`(声明行 id 由
+> `plugin-auto-reasoning` 改为 `plugin-jev-runtime`,自挂 `dsh-jev-preset`)。
+> **别再往本仓改代码** —— 改了两边就漂移,且本仓已从 profile 的 `dependencies` 与
+> `dsh.profile.bundles` 两处移除,改了也不会生效。保留本仓仅为存档与独立复用。
+>
+> 本文件下方 §「不搬进 dsh-jev-preset」那条**已被推翻**:当时的理由是
+> 「那是纯提示词插件,无运行时 `ctx.on()` 注册能力」—— 合体后它**有**了(一个包同时是
+> bundle 与运行时插件,与 `dsh-plugin-codemode` / `dsh-memory` 同款)。
+
 > 全局规则见 `~/.dsh/AGENTS.md`;本文件只写本插件特有、且**改错了会静默降级**的那些。
 > 证据、数据表、实测过程、厂商原文**全在 `README.md`** —— 本文件会被自动注入,不重复 README。
 

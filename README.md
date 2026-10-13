@@ -1,6 +1,12 @@
 # dsh-auto-reasoning
 
 > **English** | [简体中文](README.zh-CN.md)
+>
+> ⚠ **ARCHIVED / FROZEN as of 2026-10-13.** The runtime half now lives inside
+> [`dsh-jev-preset`](https://github.com/Yum-wu/dsh-jev-preset) (`lib/`), declared there as
+> `plugin-jev-runtime`. It was removed from this machine's profile `dependencies` **and**
+> `dsh.profile.bundles`, so edits here no longer take effect. This repository is kept for
+> archival reference and standalone reuse only.
 
 **Auto Reasoning Effort for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH).**  
 Dynamically project each request's `reasoningEffort` onto the **target model's valid effort ladder** based on task complexity. Provides session-level sentinel `auto`, covering both top-level requests and delegated subagents.
